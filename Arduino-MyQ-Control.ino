@@ -2,7 +2,6 @@
 //  Author: Phillip Smith
 //  Date: 9/26/2021
 //  Email: feerip@gmail.com
-//  Last Edit: 10/27/2021
 //
 //  This program, running on an Arduino, serves
 //  as a middleman between the gate state output
@@ -17,7 +16,6 @@
 //Note - input must be 3.3v
 //************************************
 #define INPUT_PIN 8
-#define MANUAL_OVERRIDE_PIN 99
 #define OUTPUT_PIN 4
 //************************************
 
@@ -48,7 +46,7 @@ void setup()
   //initializes serial communication with 9600 baud rate
   Serial.begin(9600);
   while(!Serial){}
-  Serial.print("Arduino MyQ Control V1.1\n");
+  Serial.print("Arduino MyQ Control V1.0\n");
   Serial.print("Written by Phillip Smith\n");
   Serial.print("Compiled with C++ version: ");
   Serial.print(__cplusplus);
@@ -68,9 +66,6 @@ void setup()
   //initializes the input (signal from gate) with 
   //built-in pullup resistor
   pinMode(INPUT_PIN, INPUT_PULLUP);
-  //initializes the manual override input with
-  //built-in pullup resistor
-  pinMode(MANUAL_OVERRIDE_PIN, INPUT_PULLUP);
 
   Serial.print("...done\n");
 }
@@ -138,16 +133,16 @@ int readInput()
   int read2 = -1;
 
   //initial read
-  if (digitalRead(INPUT_PIN) == HIGH || digitalRead(MANUAL_OVERRIDE_PIN) == HIGH)
+  if (digitalRead(INPUT_PIN) == HIGH)
     read1 = 1;
-  else if (digitalRead(INPUT_PIN) == LOW || digitalRead(MANUAL_OVERRIDE_PIN) == LOW)
+  else if (digitalRead(INPUT_PIN) == LOW)
     read1 = 0;
   //50ms debounce
   delay(50);
   //second read
-  if (digitalRead(INPUT_PIN) == HIGH || digitalRead(MANUAL_OVERRIDE_PIN) == HIGH)
+  if (digitalRead(INPUT_PIN) == HIGH)
     read2 = 1;
-  else if (digitalRead(INPUT_PIN) == LOW || digitalRead(MANUAL_OVERRIDE_PIN) == LOW)
+  else if (digitalRead(INPUT_PIN) == LOW)
     read2 = 0;
 
   //if both reads were 1, the input is good.
