@@ -11,33 +11,48 @@
 //  radio to transmit state (opened or closed) based
 //  on the status reported by the gate, instead of 
 //  the tilt reported by the accelerometer. 
+//
+//  Date: 10/26/2021
+//  Updates by Greydigger
+//
+//  Gate status time emulation for MYQ protocols,
+//  
+#define CLOSE_TO_OPEN_TIME 6000
+#define OPEN_TO_CLOSED_TIME 13000
+//
 //****************************************************
 //Input pins, change these as you see fit
 //Note - input must be 3.3v
 //************************************
 #define INPUT_PIN 8
 #define OUTPUT_PIN 4
+#define OVERRIDE_1_PIN 3
+#define OVERRIDE_2_PIN 2
 //************************************
 
 //This program interfaces with the MyQ Door State Sensor Radio Chip (Si4010C2, 14-pin)
 //Si4010C2 datasheet: https://www.silabs.com/documents/public/data-sheets/Si4010.pdf
 //Sequence that the MyQ sensor radio chip expects on GPIO1(Pin13):
 //DEFAULT STATE: HIGH
-//WAKEUP: LOW 36ms
-//PAUSE: HIGH 16ms
-//BROADCAST TYPE: OPENED/CLOSED 534ms/134ms LOW
+//WAKEUP_PW: LOW 36ms
+//PAUSE_PW: HIGH 16ms
+//BROADCAST TYPE: OPENED_PW/CLOSED_PW 534ms/134ms LOW
 //BACK TO DEFAULT STATE: HIGH
 
 //Timings - don't change these
-#define WAKEUP 36
-#define PAUSE 16
-#define OPENED 534
-#define CLOSED 134
+#define WAKEUP_PW 36
+#define PAUSE_PW 16
+#define OPENED_PW 534
+#define CLOSED_PW 134
 //The timings are /r/oddlyspecific, I know.
 
+//Logic state definitions
+#define GATE_OPEN 0
+#define GATE_CLOSED 1
 //Keeps track of the last known gate state 
 //so we know when to broadcast
 int gate_state;
+int pairing_mode;
 
 void setup() 
 {  
@@ -55,7 +70,7 @@ void setup()
 
   //set initial gate state, assuming 
   //signal from gate is high
-  gate_state = 1;
+  gate_state = GATE_OPEN;
   pinMode(OUTPUT_PIN, OUTPUT);
   //sets the default state of the output pin, Si4010C2
   //expects a default 3.3v (HIGH)
@@ -66,7 +81,16 @@ void setup()
   //initializes the input (signal from gate) with 
   //built-in pullup resistor
   pinMode(INPUT_PIN, INPUT_PULLUP);
+  //initialize override switch inputs (for assist with gate pairing process)
+  pinMode(OVERRIDE_1_PIN, INPUT_PULLUP);
+  pinMode(OVERRIDE_2_PIN, INPUT_PULLUP);
 
+  // if "closed" override switch is detected on startup go to manual open/close timing mode
+  pairing_mode = 0;
+  if (digitalRead(OVERRIDE_1_PIN)==LOW) {
+    pairing_mode = 1;                         
+    Serial.print("override closed switch detected on startup, setting manual timing mode\n"); 
+  }
   Serial.print("...done\n");
 }
 
@@ -78,22 +102,26 @@ void loop() {
   //check for -1 to skip if debounce detected error
   if ((newState != gate_state) && (newState != -1))
   {
-    if (newState == 0)
+    if (newState == GATE_OPEN)
     {
       //turn on the LED immediately when 
       //state change (open) is detected
       digitalWrite(LED_BUILTIN, HIGH);
-      //send the open signal
-      broadcast(OPENED);
+      Serial.print("Gate open command detected...");
+      if(!pairing_mode) delay(CLOSE_TO_OPEN_TIME);
+      //send the "gate is open" signal
+      broadcast(OPENED_PW);
       Serial.print("Gate reports OPEN\n");
     }
-    if (newState == 1)
+    if (newState == GATE_CLOSED)
     {
       //turn off the LED immediately when
       //state change (close) is detected      
       digitalWrite(LED_BUILTIN, LOW);
-      //send the close signal
-      broadcast(CLOSED);
+      Serial.print("Gate Close command detected...");
+      if(!pairing_mode) delay(OPEN_TO_CLOSED_TIME);
+      //send the "gate is closed" signal
+      broadcast(CLOSED_PW);
       Serial.print("Gate reports CLOSED\n");
     }
     //state change was successful, so we save the state before 
@@ -109,11 +137,11 @@ void broadcast(int ms)
 {
   //wakeup
   digitalWrite(OUTPUT_PIN, LOW);
-  delay(WAKEUP);
+  delay(WAKEUP_PW);
 
   //pause
   digitalWrite(OUTPUT_PIN, HIGH);
-  delay(PAUSE);
+  delay(PAUSE_PW);
 
   //signal
   digitalWrite(OUTPUT_PIN, LOW);
@@ -125,6 +153,7 @@ void broadcast(int ms)
 
 //this function serves as a simple debouncer for the input
 //whether from button for testing or from the gate
+// 10/27/2021 added override switch inputs. logical precedence.
 int readInput()
 {
   //if either of these are not changed from 
@@ -133,14 +162,22 @@ int readInput()
   int read2 = -1;
 
   //initial read
-  if (digitalRead(INPUT_PIN) == HIGH)
+  if (digitalRead(OVERRIDE_1_PIN)==LOW)
+    read1 = 1;
+  else if (digitalRead(OVERRIDE_2_PIN)==LOW)
+    read1 = 0;
+  else if (digitalRead(INPUT_PIN) == HIGH)
     read1 = 1;
   else if (digitalRead(INPUT_PIN) == LOW)
     read1 = 0;
   //50ms debounce
   delay(50);
   //second read
-  if (digitalRead(INPUT_PIN) == HIGH)
+  if (digitalRead(OVERRIDE_1_PIN)==LOW)
+    read2 = 1;
+  else if (digitalRead(OVERRIDE_2_PIN)==LOW)
+    read2 = 0;
+  else if (digitalRead(INPUT_PIN) == HIGH)
     read2 = 1;
   else if (digitalRead(INPUT_PIN) == LOW)
     read2 = 0;
