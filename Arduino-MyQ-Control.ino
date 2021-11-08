@@ -19,6 +19,9 @@
 //  
 #define CLOSE_TO_OPEN_TIME 6000
 #define OPEN_TO_CLOSED_TIME 13000
+#define DEBOUNCE_TIME 50
+// 5 minutes -
+#define MIN_BROADCAST_PERIOD 300000
 //
 //****************************************************
 //Input pins, change these as you see fit
@@ -54,6 +57,10 @@
 int gate_state;
 int pairing_mode;
 
+// need to periodically send gate status according to MyQ requirements
+// global variable that gets reset by broadcast().
+long idle_time = MIN_BROADCAST_PERIOD;
+ 
 void setup() 
 {  
   // put your setup code here, to run once:
@@ -92,14 +99,15 @@ void setup()
     Serial.print("override closed switch detected on startup, setting manual timing mode\n"); 
   }
   Serial.print("...done\n");
+  // Serial.print(idle_time);
+
 }
 
 void loop() {
 
   //read input indirectly, through debounce function
   int newState = readInput();
-
-  //check for -1 to skip if debounce detected error
+    //check for -1 to skip if debounce detected error
   if ((newState != gate_state) && (newState != -1))
   {
     if (newState == GATE_OPEN)
@@ -127,7 +135,15 @@ void loop() {
     //state change was successful, so we save the state before 
     //starting the loop over
     gate_state = newState;
-  }
+  } 
+  else if (idle_time <= 0)
+    {
+      Serial.print("re-broadcasting gate status: ");
+      Serial.print(idle_time);
+      Serial.print("\n");
+      broadcast(gate_state == GATE_CLOSED ? CLOSED_PW : OPENED_PW);
+    }
+
 }
 
 //protocol for the Si4010C2's wakeup and pause sections is the same
@@ -149,6 +165,9 @@ void broadcast(int ms)
 
   //finished, "you can go ahead and broadcast now"
   digitalWrite(OUTPUT_PIN, HIGH);
+
+  // reset GLOBAL idle_time variable each time broadcase() is used;
+  idle_time = MIN_BROADCAST_PERIOD;
 }
 
 //this function serves as a simple debouncer for the input
@@ -171,7 +190,11 @@ int readInput()
   else if (digitalRead(INPUT_PIN) == LOW)
     read1 = 0;
   //50ms debounce
-  delay(50);
+  delay(DEBOUNCE_TIME);
+
+  // GLOBAL VARIABLE USAGE
+  idle_time -= DEBOUNCE_TIME;  
+
   //second read
   if (digitalRead(OVERRIDE_1_PIN)==LOW)
     read2 = 1;
